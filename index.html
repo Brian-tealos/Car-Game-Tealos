@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0d1117">
+<title>Street Racers - Prototipo</title>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@0,600;0,800;1,800&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0d1117;--road:#252932;--amber:#ffb703;--red:#e5383b;--ink:#f1f3f5;--mute:#8b93a1;--f:'Barlow Condensed','Arial Narrow',system-ui,sans-serif}
+[hidden]{display:none!important}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family:var(--f);overflow:hidden;overscroll-behavior:none;touch-action:manipulation}
+canvas{position:fixed;inset:0;width:100%;height:100%;touch-action:none}
+#hud{position:fixed;top:0;left:0;right:0;display:flex;justify-content:space-between;padding:calc(8px + env(safe-area-inset-top)) calc(16px + env(safe-area-inset-right)) 8px calc(16px + env(safe-area-inset-left));pointer-events:none;text-shadow:0 1px 6px #000}
+#hud div{line-height:1}
+#hud small{display:block;font-size:.8rem;color:var(--mute);font-weight:600;margin-bottom:2px}
+#hud b{font-size:1.7rem;font-weight:800;font-variant-numeric:tabular-nums}
+#hud .r{text-align:right}
+#msg{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;font-size:7rem;font-weight:800;font-style:italic;color:var(--amber);text-shadow:0 0 30px rgba(255,183,3,.5);pointer-events:none}
+#bm{position:fixed;top:calc(8px + env(safe-area-inset-top));left:50%;transform:translateX(-50%);background:rgba(13,17,23,.7);color:var(--ink);border:1px solid #3a404c;border-radius:8px;font:600 1rem var(--f);padding:6px 14px}
+.ctl{position:fixed;bottom:calc(18px + env(safe-area-inset-bottom));width:88px;height:88px;border-radius:50%;border:3px solid var(--amber);background:rgba(13,17,23,.55);color:var(--ink);font:800 2rem var(--f);touch-action:none;display:none;padding:0}
+.ctl:active,.ctl.on{background:rgba(255,183,3,.35)}
+#L{left:calc(18px + env(safe-area-inset-left))}
+#R{right:calc(18px + env(safe-area-inset-right))}
+#B{left:50%;transform:translateX(-50%);width:72px;height:72px;border-color:var(--red);font-size:1rem}
+body.touch .ctl{display:block}
+#menu{position:fixed;inset:0;background:var(--bg);overflow-y:auto;padding:calc(14px + env(safe-area-inset-top)) calc(18px + env(safe-area-inset-right)) 24px calc(18px + env(safe-area-inset-left))}
+header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}
+h1{margin:0;font-size:2.4rem;font-weight:800;font-style:italic;line-height:1}
+h1 span{color:var(--amber)}
+header p{margin:2px 0 0;color:var(--mute);font-size:1.05rem}
+#go{background:var(--amber);color:#111;border:0;border-radius:10px;font:800 1.4rem var(--f);padding:10px 26px;white-space:nowrap}
+#cars{display:grid;grid-template-columns:repeat(auto-fill,minmax(128px,1fr));gap:10px}
+.car{border:2px solid #272c36;border-radius:10px;padding:10px;background:#141922}
+.car.sel{border-color:var(--amber);background:#1b212c}
+.car.lock{opacity:.35}
+.pv{display:block;width:120px;max-width:100%;height:auto;margin-bottom:6px}
+.car b{display:block;font-size:1.25rem;font-weight:800;line-height:1.1}
+.car small{display:block;color:var(--mute);font-size:.9rem;margin-bottom:6px}
+.bar{display:flex;align-items:center;gap:6px;font-size:.8rem;color:var(--mute);margin-top:3px}
+.bar span{width:44px}
+.bar em{flex:1;height:5px;background:#2a303b;border-radius:3px;overflow:hidden}
+.bar u{display:block;height:100%;background:var(--amber)}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="hud" hidden>
+  <div><small>Vuelta</small><b id="lap">1</b></div>
+  <div class="r"><small>Tiempo</small><b id="tm">0:00.000</b></div>
+  <div class="r"><small>Mejor</small><b id="best">--</b></div>
+  <div class="r"><small>km/h</small><b id="kmh">0</b></div>
+</div>
+<button id="bm" hidden>Menú</button>
+<div id="msg"></div>
+<button class="ctl" id="L">◀</button>
+<button class="ctl" id="B">Freno</button>
+<button class="ctl" id="R">▶</button>
+<div id="menu">
+  <header>
+    <div><h1>Street <span>Racers</span></h1><p>Prototipo · todos los autos rinden igual, gana la habilidad</p></div>
+    <button id="go">Correr</button>
+  </header>
+  <div id="cars"></div>
+</div>
+<script>
+'use strict';
+const $ = id => document.getElementById(id);
+const cv = $('c'), ctx = cv.getContext('2d');
+let W, H, DPR = 1;
+function resize() { DPR = Math.min(devicePixelRatio || 1, 2); W = innerWidth; H = innerHeight; cv.width = W * DPR; cv.height = H * DPR; }
+addEventListener('resize', resize); resize();
+if (matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window) document.body.classList.add('touch');
+
+/* ---------- Autos (nombres de la oficina; tipos y colores son provisionales) ---------- */
+const TYPES = { dep: ['Deportivo', 5, 4, 3], mus: ['Muscle', 4, 5, 2], com: ['Compacto', 3, 4, 4], cam: ['Camioneta', 4, 2, 5], sed: ['Sedán', 4, 3, 4] };
+const CARS = [
+  ['Cleiver', 'dep', '#e5383b'], ['Oriana', 'com', '#ff8fab'], ['Jose', 'mus', '#2ec4b6'], ['Liseth', 'sed', '#b388eb'],
+  ['Luis', 'cam', '#8ecae6'], ['Abraham', 'mus', '#f77f00'], ['Ibrahim', 'dep', '#ffd60a'],
+  ['???', 'sed', '#666'], ['???', 'sed', '#666'], ['???', 'sed', '#666'], ['El_tryhard', 'sed', '#f1f3f5']
+].map(([name, t, color]) => ({ name, color, type: TYPES[t][0], spd: TYPES[t][1], acc: TYPES[t][2], grp: TYPES[t][3], locked: name === '???', ae86: name === 'El_tryhard' }));
+Object.assign(CARS[10], { type: 'Coupé AE86', spd: 5.5, acc: 4.5, grp: 4 }); // stats propios del auto del admin (solo si AUTOS_IGUALES = false)
+Object.assign(CARS[4], { type: 'Viper ACR', viper: true });  // Luis: Dodge Viper
+// Modo equitativo: todos los autos rinden igual (225 km/h) y gana la habilidad. Pon false para volver a stats distintos por auto.
+const AUTOS_IGUALES = true;
+if (AUTOS_IGUALES) CARS.forEach(c => { c.spd = 4; c.acc = 4; c.grp = 4; });
+let sel = CARS[10];
+
+/* ---------- Pista street: circuito cerrado a partir de puntos de control ---------- */
+const PTS0 = [[300,300],[900,260],[1500,300],[1900,520],[1950,950],[1650,1200],[1250,1050],[1000,1250],[1250,1550],[800,1650],[350,1500],[150,1100],[420,850],[200,600]];
+const PTS = PTS0.map(([x, y]) => [x * 1.4, y * 1.4]);
+const TR = [], TW = 140;
+for (let i = 0; i < PTS.length; i++) {
+  const p0 = PTS[(i + PTS.length - 1) % PTS.length], p1 = PTS[i], p2 = PTS[(i + 1) % PTS.length], p3 = PTS[(i + 2) % PTS.length];
+  for (let k = 0; k < 30; k++) {
+    const t = k / 30, t2 = t * t, t3 = t2 * t;
+    const f = (a, b, c, d) => 0.5 * (2 * b + (-a + c) * t + (2 * a - 5 * b + 4 * c - d) * t2 + (-a + 3 * b - 3 * c + d) * t3);
+    TR.push([f(p0[0], p1[0], p2[0], p3[0]), f(p0[1], p1[1], p2[1], p3[1])]);
+  }
+}
+const N = TR.length;
+const startAngle = Math.atan2(TR[3][1] - TR[0][1], TR[3][0] - TR[0][0]);
+
+/* ---------- Entrada ---------- */
+const inp = { l: 0, r: 0, b: 0 };
+const KEYS = { ArrowLeft: 'l', KeyA: 'l', ArrowRight: 'r', KeyD: 'r', ArrowDown: 'b', KeyS: 'b', Space: 'b' };
+addEventListener('keydown', e => { if (KEYS[e.code]) { inp[KEYS[e.code]] = 1; e.preventDefault(); } });
+addEventListener('keyup', e => { if (KEYS[e.code]) inp[KEYS[e.code]] = 0; });
+function hold(id, k) {
+  const b = $(id);
+  b.addEventListener('pointerdown', e => { e.preventDefault(); inp[k] = 1; b.classList.add('on'); try { b.setPointerCapture(e.pointerId); } catch (_) {} });
+  ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(ev => b.addEventListener(ev, () => { inp[k] = 0; b.classList.remove('on'); }));
+  b.addEventListener('contextmenu', e => e.preventDefault());
+}
+hold('L', 'l'); hold('R', 'r'); hold('B', 'b');
+
+/* ---------- Estado de juego ---------- */
+let state = 'menu', cd = 0, rt = 0, lapStart = 0, lap = 1, best = null, last = 0;
+const P = { x: 0, y: 0, a: 0, vx: 0, vy: 0, ni: 0, acc: 0, vf: 0 };
+const cam = { x: 0, y: 0 };
+const fmt = t => { const m = Math.floor(t / 60); return m + ':' + (t - m * 60).toFixed(3).padStart(6, '0'); };
+const bestKey = () => 'sr_best_' + sel.name;
+
+function begin() {
+  P.x = TR[0][0]; P.y = TR[0][1]; P.a = startAngle; P.vx = P.vy = P.vf = 0; P.ni = 0; P.acc = 0;
+  cam.x = P.x; cam.y = P.y;
+  rt = 0; lapStart = 0; lap = 1;
+  try { best = parseFloat(localStorage.getItem(bestKey())) || null; } catch (_) { best = null; }
+  $('menu').hidden = true; $('hud').hidden = false; $('bm').hidden = false;
+  state = 'count'; cd = 3;
+}
+
+function lapDone() {
+  const t = rt - lapStart; lapStart = rt; lap++;
+  if (best === null || t < best) {
+    best = t;
+    try { localStorage.setItem(bestKey(), String(t)); } catch (_) {}
+    flash('Nueva mejor vuelta ' + fmt(t));
+  } else flash('Vuelta ' + fmt(t));
+}
+let flashT = 0;
+function flash(s) { const m = $('msg'); m.style.fontSize = '2.4rem'; m.textContent = s; flashT = 2.2; }
+
+function step(dt) {
+  const racing = state === 'race';
+  const maxV = 300 + sel.spd * 50, acc = 200 + sel.acc * 90, grip = 3 + sel.grp * 2;
+
+  // distancia a la pista y avance de vuelta
+  let bi = P.ni, bd = 1e18;
+  for (let j = -40; j <= 40; j++) {
+    const i = (P.ni + j + N) % N, dx = P.x - TR[i][0], dy = P.y - TR[i][1], d = dx * dx + dy * dy;
+    if (d < bd) { bd = d; bi = i; }
+  }
+  let d = bi - P.ni; if (d > N / 2) d -= N; if (d < -N / 2) d += N;
+  P.ni = bi; P.acc += d;
+  const off = Math.sqrt(bd) > TW / 2;
+  if (racing && P.acc >= N) { P.acc -= N; lapDone(); }
+
+  const fx = Math.cos(P.a), fy = Math.sin(P.a);
+  let vf = P.vx * fx + P.vy * fy, vr = -P.vx * fy + P.vy * fx;
+  const cap = off ? maxV * 0.4 : maxV;
+  if (racing) {
+    if (vf < cap) vf = Math.min(cap, vf + acc * dt);          // acelera solo
+    if (inp.b) vf = Math.max(-80, vf - 650 * dt);
+  } else vf *= Math.max(0, 1 - 4 * dt);
+  if (vf > cap) vf -= (vf - cap) * 3 * dt;                     // frena al salirte de la pista
+  vr *= Math.exp(-grip * dt);                                   // agarre lateral
+  if (racing) P.a += (inp.r - inp.l) * (1.5 + sel.grp * 0.25) * Math.min(1, Math.abs(vf) / 140) * (vf < 0 ? -1 : 1) * dt;
+  const nx = Math.cos(P.a), ny = Math.sin(P.a);
+  P.vx = nx * vf - ny * vr; P.vy = ny * vf + nx * vr; P.vf = vf;
+  P.x += P.vx * dt; P.y += P.vy * dt;
+}
+
+
+/* ---------- Dibujo de autos (vista desde arriba, mirando a +x) ---------- */
+const SPEC = {
+  'Deportivo': { L: 46, W: 20, n: 14, t: 7, c0: -7, c1: 7, spoiler: 1 },
+  'Muscle':    { L: 50, W: 21, n: 9,  t: 5, c0: -9, c1: 5, stripe: 1 },
+  'Compacto':  { L: 38, W: 19, n: 8,  t: 5, c0: -8, c1: 8 },
+  'Camioneta': { L: 54, W: 22, n: 7,  t: 3, c0: 0,  c1: 15, bed: 1 },
+  'Sedán':     { L: 46, W: 20, n: 10, t: 5, c0: -9, c1: 7 }
+};
+function rr(g, x, y, w, h, r) { g.beginPath(); if (g.roundRect) g.roundRect(x, y, w, h, r); else g.rect(x, y, w, h); g.fill(); }
+function bodyPath(g, L, W, n, t) {
+  g.beginPath();
+  g.moveTo(-L / 2 + t, -W / 2); g.lineTo(L / 2 - n, -W / 2);
+  g.quadraticCurveTo(L / 2, -W / 2, L / 2, -W * 0.25); g.lineTo(L / 2, W * 0.25);
+  g.quadraticCurveTo(L / 2, W / 2, L / 2 - n, W / 2); g.lineTo(-L / 2 + t, W / 2);
+  g.quadraticCurveTo(-L / 2, W / 2, -L / 2, W * 0.3); g.lineTo(-L / 2, -W * 0.3);
+  g.quadraticCurveTo(-L / 2, -W / 2, -L / 2 + t, -W / 2); g.closePath();
+}
+function ae86Path(g) {
+  g.beginPath(); g.moveTo(23, -5.2); g.quadraticCurveTo(23, -7.6, 21, -7.9); g.lineTo(14.5, -9); g.lineTo(-18, -9);
+  g.quadraticCurveTo(-23, -8.6, -23, -6); g.lineTo(-23, 6); g.quadraticCurveTo(-23, 8.6, -18, 9); g.lineTo(14.5, 9); g.lineTo(21, 7.9);
+  g.quadraticCurveTo(23, 7.6, 23, 5.2); g.closePath();
+}
+function poly(g, pts, fill) { g.beginPath(); pts.forEach(([x, y], i) => i ? g.lineTo(x, y) : g.moveTo(x, y)); g.closePath(); g.fillStyle = fill; g.fill(); }
+/* Proporciones tomadas de la foto de referencia: capó negro, parabrisas que se estrecha hacia el techo,
+   techo blanco, ventanas laterales con pilar central y luna trasera que se ensancha hacia la cola. */
+function drawAE86(g) {
+  g.beginPath(); g.moveTo(7.6, -7.4); g.lineTo(14.5, -8.4); g.lineTo(21, -7.3); g.quadraticCurveTo(22.4, -7, 22.4, -5); g.lineTo(22.4, 5);
+  g.quadraticCurveTo(22.4, 7, 21, 7.3); g.lineTo(14.5, 8.4); g.lineTo(7.6, 7.4); g.closePath(); g.fillStyle = '#111'; g.fill();
+  const wg = g.createLinearGradient(7.6, 0, 0, 0); wg.addColorStop(0, '#5a2f3a'); wg.addColorStop(1, '#1c1217');
+  poly(g, [[7.6, -7.4], [0, -6.2], [0, 6.2], [7.6, 7.4]], wg);
+  g.fillStyle = '#f6f6f4'; rr(g, -12.4, -6.1, 12.4, 12.2, 1.2);
+  [-1, 1].forEach(sd => {
+    poly(g, [[4.3, sd * 6.3], [-6.7, sd * 6.1], [-6.7, sd * 8], [3.6, sd * 8.2]], '#756e72');
+    poly(g, [[-7.6, sd * 6.1], [-14.4, sd * 5.9], [-14.4, sd * 7.7], [-7.6, sd * 7.9]], '#756e72');
+  });
+  const rg = g.createLinearGradient(-12.4, 0, -19, 0); rg.addColorStop(0, '#1c1217'); rg.addColorStop(1, '#4a2a34');
+  poly(g, [[-12.4, -5.6], [-19, -6.7], [-19, 6.7], [-12.4, 5.6]], rg);
+  g.fillStyle = '#e9e9e6'; g.fillRect(19.5, -7, 3, 3.6); g.fillRect(19.5, 3.4, 3, 3.6);
+  g.fillStyle = '#ffe69a'; g.fillRect(21.5, -6.6, 1.5, 2.8); g.fillRect(21.5, 3.8, 1.5, 2.8);
+  g.fillStyle = '#e5383b'; g.fillRect(-23, -8, 2, 4.6); g.fillRect(-23, 3.4, 2, 4.6);
+  [-1, 1].forEach(sd => poly(g, [[5.6, sd * 8.8], [4.4, sd * 8.8], [2.8, sd * 11.2], [3.9, sd * 11.4]], '#111'));
+}
+function viperPath(g) {
+  g.beginPath(); g.moveTo(23, -5.6); g.quadraticCurveTo(23, -8.8, 17.5, -9.8); g.lineTo(-6, -10); g.lineTo(-14, -9.6);
+  g.quadraticCurveTo(-22.5, -9.2, -23, -6); g.lineTo(-23, 6); g.quadraticCurveTo(-22.5, 9.2, -14, 9.6); g.lineTo(-6, 10); g.lineTo(17, 9.7);
+  g.quadraticCurveTo(23, 8.8, 23, 5.6); g.closePath();
+}
+/* Dodge Viper ACR (foto de referencia): carrocería plateada, franja central negra con vivos rojos,
+   branquias en el capó, luna trasera oscura y el gran alerón negro con extremos rojos. */
+function drawViper(g) {
+  g.fillStyle = '#141518'; g.fillRect(-22.4, -3.5, 44.8, 7);
+  g.fillStyle = '#d1202f';
+  [-1, 1].forEach(sd => { const y0 = sd > 0 ? 3.5 : -4.4; g.fillRect(7.4, y0, 15, 0.9); g.fillRect(-10.9, y0, 10.5, 0.9); });
+  g.fillStyle = '#1b1f27';
+  [-1, 1].forEach(sd => [18.3, 15.6, 12.9].forEach(x => g.fillRect(x - 0.5, sd > 0 ? 6 : -8.6, 1, 2.6)));
+  const wg = g.createLinearGradient(7.6, 0, -0.4, 0); wg.addColorStop(0, '#6f8f96'); wg.addColorStop(1, '#1e292e');
+  poly(g, [[7.8, -5.6], [6, -8], [-0.4, -8.4], [-0.4, 8.4], [6, 8], [7.8, 5.6]], wg);
+  [-1, 1].forEach(sd => poly(g, [[0, sd * 6.6], [-9, sd * 6.4], [-9, sd * 7.6], [0, sd * 7.8]], '#14181e'));
+  g.fillStyle = '#16191f'; rr(g, -22.3, -7, 11.6, 14, 3.5);
+  g.fillStyle = 'rgba(255,255,255,.07)'; rr(g, -20.5, -5.2, 7.8, 10.4, 2.5);
+  g.fillStyle = '#e9eef5'; g.fillRect(20.5, -7.6, 2, 2.4); g.fillRect(20.5, 5.2, 2, 2.4);
+  [-1, 1].forEach(sd => poly(g, [[1.6, sd * 9.8], [-0.6, sd * 9.8], [-0.8, sd * 11.8], [1.2, sd * 11.8]], '#c9d0da'));
+  g.fillStyle = '#14161b'; rr(g, -29.5, -13, 9.2, 26, 1.5);                       // alerón
+  g.fillStyle = '#d1202f'; g.fillRect(-29.5, 3.6, 9.2, 1); g.fillRect(-29.5, -4.6, 9.2, 1);
+  g.fillRect(-29.5, -13, 9.2, 0.9); g.fillRect(-29.5, 12.1, 9.2, 0.9);
+}
+function drawCar(g, c, steer) {
+  const s = c.ae86 ? { L: 46, W: 18, n: 9, t: 4 } : c.viper ? { L: 46, W: 20, n: 9, t: 4 } : SPEC[c.type], L = s.L, W = s.W;
+  const path = c.ae86 ? ae86Path : c.viper ? viperPath : gg => bodyPath(gg, L, W, s.n, s.t);
+  g.save(); g.translate(2, 2); path(g); g.fillStyle = 'rgba(0,0,0,.35)'; g.fill(); g.restore();
+  g.fillStyle = '#0b0d11';                                           // ruedas (las delanteras giran)
+  [[L * 0.28, 1], [L * 0.28, -1], [-L * 0.3, 1], [-L * 0.3, -1]].forEach(([x, sd], i) => {
+    g.save(); g.translate(x, sd * (W / 2 - (c.ae86 || c.viper ? 0.4 : 0))); if (i < 2) g.rotate((steer || 0) * 0.45); const wl = c.ae86 || c.viper ? 3.8 : 4.5, wt = c.ae86 || c.viper ? 1.8 : 2; g.fillRect(-wl, -wt, wl * 2, wt * 2); g.restore();
+  });
+  path(g); g.fillStyle = c.ae86 ? '#f4f4f2' : c.viper ? '#c9d0da' : c.color; g.fill();
+  if (c.ae86) { drawAE86(g); return; }
+  if (c.viper) { drawViper(g); return; }
+  if (s.bed) { g.fillStyle = 'rgba(0,0,0,.35)'; g.fillRect(-L / 2 + 3, -W / 2 + 3, s.c0 - 1 + L / 2 - 3 - 3, W - 6); }
+  g.fillStyle = '#10141b'; rr(g, s.c0, -W / 2 + 3, s.c1 - s.c0, W - 6, 3);   // cabina (lunas)
+  g.fillStyle = c.color; rr(g, s.c0 + 3, -W / 2 + 4, s.c1 - s.c0 - 6, W - 8, 2);
+  g.fillStyle = 'rgba(255,255,255,.2)'; rr(g, s.c0 + 3, -W / 2 + 4, s.c1 - s.c0 - 6, W - 8, 2);
+  if (s.stripe) { g.fillStyle = 'rgba(255,255,255,.6)'; g.fillRect(s.c1 + 3, -1.5, L / 2 - s.c1 - 8, 3); g.fillRect(-L / 2 + 4, -1.5, s.c0 + L / 2 - 8, 3); }
+  if (s.spoiler) { g.fillStyle = '#10141b'; g.fillRect(-L / 2 - 1, -W / 2 + 1, 3, W - 2); }
+  g.fillStyle = '#fff6c8'; g.fillRect(L / 2 - 2.5, -W / 2 + 1.5, 2.5, 4); g.fillRect(L / 2 - 2.5, W / 2 - 5.5, 2.5, 4);
+  g.fillStyle = '#e5383b'; g.fillRect(-L / 2, -W / 2 + 1.5, 2, 4); g.fillRect(-L / 2, W / 2 - 5.5, 2, 4);
+  g.fillStyle = '#10141b'; g.fillRect(s.c1 - 2, -W / 2 - 1.5, 3, 2); g.fillRect(s.c1 - 2, W / 2 - 0.5, 3, 2);
+}
+
+/* ---------- Dibujo ---------- */
+function trackPath() { ctx.beginPath(); ctx.moveTo(TR[0][0], TR[0][1]); for (let i = 1; i < N; i++) ctx.lineTo(TR[i][0], TR[i][1]); ctx.closePath(); }
+function draw() {
+  const z = Math.min(W, H) / 560;
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  ctx.fillStyle = '#0d1117'; ctx.fillRect(0, 0, W, H);
+  ctx.translate(W / 2, H / 2); ctx.scale(z, z); ctx.translate(-cam.x, -cam.y);
+
+  // manzanas de la ciudad (cuadrícula)
+  const x0 = cam.x - W / 2 / z, x1 = cam.x + W / 2 / z, y0 = cam.y - H / 2 / z, y1 = cam.y + H / 2 / z, g = 200;
+  ctx.strokeStyle = '#161c26'; ctx.lineWidth = 2; ctx.beginPath();
+  for (let x = Math.floor(x0 / g) * g; x < x1; x += g) { ctx.moveTo(x, y0); ctx.lineTo(x, y1); }
+  for (let y = Math.floor(y0 / g) * g; y < y1; y += g) { ctx.moveTo(x0, y); ctx.lineTo(x1, y); }
+  ctx.stroke();
+
+  // bordillos, asfalto y línea central
+  ctx.lineJoin = 'round'; trackPath();
+  ctx.lineCap = 'butt'; ctx.setLineDash([]); ctx.lineWidth = TW + 18; ctx.strokeStyle = '#f1f3f5'; ctx.stroke();
+  ctx.setLineDash([26, 26]); ctx.strokeStyle = '#e5383b'; ctx.stroke();
+  ctx.setLineDash([]); ctx.lineWidth = TW; ctx.strokeStyle = '#252932'; ctx.stroke();
+  ctx.setLineDash([34, 30]); ctx.lineWidth = 4; ctx.strokeStyle = '#ffb703'; ctx.stroke();
+  ctx.setLineDash([]);
+
+  // línea de meta
+  ctx.save(); ctx.translate(TR[0][0], TR[0][1]); ctx.rotate(startAngle);
+  for (let r = 0; r < 7; r++) for (let c = 0; c < 2; c++) { ctx.fillStyle = (r + c) % 2 ? '#111' : '#fff'; ctx.fillRect(c * 12 - 12, -TW / 2 + r * (TW / 7), 12, TW / 7); }
+  ctx.restore();
+
+  // auto
+  ctx.save(); ctx.translate(P.x, P.y); ctx.rotate(P.a); drawCar(ctx, sel, state === 'race' ? inp.r - inp.l : 0); ctx.restore();
+  ctx.font = '800 14px "Barlow Condensed", sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = '#f1f3f5';
+  ctx.fillText(sel.name, P.x, P.y - 24);
+}
+
+/* ---------- Bucle ---------- */
+function loop(now) {
+  const dt = Math.min(0.033, (now - last) / 1000 || 0); last = now;
+  if (state !== 'menu') {
+    if (state === 'count') {
+      cd -= dt; const n = Math.ceil(cd);
+      const m = $('msg'); m.style.fontSize = '7rem'; m.textContent = n > 0 ? n : 'YA';
+      if (cd <= 0) state = 'race';
+    }
+    if (state === 'race') { rt += dt; if (flashT > 0 && (flashT -= dt) <= 0) $('msg').textContent = ''; if ($('msg').textContent === 'YA' && rt > 0.6) $('msg').textContent = ''; }
+    step(dt);
+    cam.x += (P.x - cam.x) * Math.min(1, 8 * dt); cam.y += (P.y - cam.y) * Math.min(1, 8 * dt);
+    $('lap').textContent = lap; $('tm').textContent = fmt(Math.max(0, rt - lapStart));
+    $('best').textContent = best === null ? '--' : fmt(best); $('kmh').textContent = Math.round(Math.max(0, P.vf) * 0.45);
+  }
+  draw();
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+
+/* ---------- Menú ---------- */
+const bar = (l, v) => `<div class="bar"><span>${l}</span><em><u style="width:${v * 20}%"></u></em></div>`;
+CARS.forEach(c => {
+  const el = document.createElement('div');
+  el.className = 'car' + (c.locked ? ' lock' : '') + (c === sel ? ' sel' : '');
+  el.innerHTML = `<canvas class="pv" width="240" height="120"></canvas><b>${c.name}</b><small>${c.locked ? 'Bloqueado' : c.type}</small>${AUTOS_IGUALES ? '' : bar('Vel.', c.spd) + bar('Acel.', c.acc) + bar('Agarre', c.grp)}`;
+  const pg = el.querySelector('canvas').getContext('2d'); pg.translate(120, 60); pg.scale(3.6, 3.6); drawCar(pg, c, 0);
+  if (c.locked) el.querySelector('canvas').style.filter = 'grayscale(1)';
+  el.addEventListener('click', () => { if (c.locked) return; sel = c; document.querySelectorAll('.car').forEach(x => x.classList.remove('sel')); el.classList.add('sel'); });
+  $('cars').appendChild(el);
+});
+$('go').addEventListener('click', begin);
+$('bm').addEventListener('click', () => { state = 'menu'; $('menu').hidden = false; $('hud').hidden = true; $('bm').hidden = true; $('msg').textContent = ''; inp.l = inp.r = inp.b = 0; });
+</script>
+</body>
+</html>
